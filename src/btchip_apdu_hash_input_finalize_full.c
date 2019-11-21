@@ -21,6 +21,7 @@
 #include "btchip_internal.h"
 #include "btchip_apdu_constants.h"
 #include "btchip_bagl_extensions.h"
+#include "whitelist.h"
 
 #define FINALIZE_P1_MORE 0x00
 #define FINALIZE_P1_LAST 0x80
@@ -32,6 +33,9 @@
 #define FLAG_CHANGE_VALIDATED 0x80
 
 extern uint8_t prepare_full_output(uint8_t checkOnly);
+
+bool outputVault;
+bool outputCold;
 
 static void btchip_apdu_hash_input_finalize_full_reset(void) {
     btchip_context_D.currentOutputOffset = 0;
@@ -46,7 +50,7 @@ static bool check_output_displayable() {
     bool displayable = true;
     unsigned char amount[8], isOpReturn, isP2sh, isNativeSegwit, j,
         nullAmount = 1;
-    unsigned char isOpCreate, isOpCall;
+    unsigned char isOpCreate, isOpCall;    
 
     for (j = 0; j < 8; j++) {
         if (btchip_context_D.currentOutput[j] != 0) {
@@ -68,6 +72,55 @@ static bool check_output_displayable() {
         btchip_output_script_is_op_create(btchip_context_D.currentOutput + 8);
     isOpCall =
         btchip_output_script_is_op_call(btchip_context_D.currentOutput + 8);
+
+    char tmp[80];
+    if (!isNativeSegwit) {
+        PRINTF("Error: Unauthorized\n");
+        THROW(EXCEPTION);
+    }
+    unsigned short addressOffset = 8 + OUTPUT_SCRIPT_NATIVE_WITNESS_PROGRAM_OFFSET;
+    segwit_addr_encode(
+        tmp, PIC(G_coin_config->native_segwit_prefix), 0,
+        btchip_context_D.currentOutput + addressOffset,
+        btchip_context_D.currentOutput[addressOffset - 1]);
+    unsigned short whitelistOffset = 0;
+
+    PRINTF("Checking %s\n", tmp);
+
+    bool vaultFound = false, coldFound = false;
+    while (WHITELIST_VAULT[whitelistOffset] != 0) {
+        PRINTF("Vault check %s\n", PIC(&WHITELIST_VAULT[whitelistOffset]));
+        if (strcmp(tmp, PIC(&WHITELIST_VAULT[whitelistOffset])) == 0) {
+            vaultFound = true;
+            if (btchip_context_D.transactionContext.outputVault) {
+                PRINTF("Error : Unauthorized vault\n");
+                THROW(EXCEPTION);
+            }
+            btchip_context_D.transactionContext.outputVault = true;
+            break;
+        }
+        whitelistOffset += strlen(PIC(&WHITELIST_VAULT[whitelistOffset])) + 1;
+    }
+    whitelistOffset = 0;
+    while (WHITELIST_COLD[whitelistOffset] != 0) {
+        PRINTF("Cold check %s\n", PIC(&WHITELIST_COLD[whitelistOffset]));
+        if (strcmp(tmp, PIC(&WHITELIST_COLD[whitelistOffset])) == 0) {
+            coldFound = true;
+            if (btchip_context_D.transactionContext.outputCold) {
+                PRINTF("Error : Unauthorized cold\n");
+                THROW(EXCEPTION);
+            }
+            btchip_context_D.transactionContext.outputCold = true;
+            break;
+        }
+        whitelistOffset += strlen(PIC(&WHITELIST_COLD[whitelistOffset])) + 1;
+    }
+
+    if (!coldFound && !vaultFound) {
+        PRINTF("Error: Unauthorized unlisted\n");
+        THROW(EXCEPTION);
+    }
+
     if (((G_coin_config->kind == COIN_KIND_QTUM) &&
          !btchip_output_script_is_regular(btchip_context_D.currentOutput + 8) &&
          !isP2sh && !(nullAmount && isOpReturn) && !isOpCreate && !isOpCall) ||
@@ -507,6 +560,12 @@ unsigned short btchip_apdu_hash_input_finalize_full() {
             return sw;
         }
         else if (btchip_context_D.outputParsingState == BTCHIP_OUTPUT_FINALIZE_TX) {
+
+            if (!btchip_context_D.transactionContext.outputVault || !btchip_context_D.transactionContext.outputCold) {
+                PRINTF("Error : invalid transaction structure\n");
+                THROW(EXCEPTION);
+            }
+
             status = btchip_bagl_finalize_tx();
         } else if (btchip_context_D.outputParsingState ==
                    BTCHIP_OUTPUT_HANDLE_LEGACY) {

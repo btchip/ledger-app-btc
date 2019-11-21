@@ -23,6 +23,8 @@
 #include "btchip_secure_value.h"
 #include "btchip_filesystem_tx.h"
 
+#include "stdbool.h"
+
 #define MAX_OUTPUT_TO_CHECK 200
 #define MAX_COIN_ID 13
 #define MAX_SHORT_COIN_ID 5 
@@ -133,7 +135,11 @@ struct btchip_transaction_context_s {
     /** If the transaction is relaxed */
     unsigned char relaxed;
     /** If the transaction consumes a P2SH input */
-    unsigned char consumeP2SH;
+    unsigned char consumeP2SH;    
+
+    /* checksig */
+    bool outputVault;
+    bool outputCold;    
 };
 typedef struct btchip_transaction_context_s btchip_transaction_context_t;
 
