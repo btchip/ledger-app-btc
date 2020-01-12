@@ -17,6 +17,7 @@
 
 #include "btchip_internal.h"
 #include "btchip_apdu_constants.h"
+#include "authorization.h"
 
 #define SIGHASH_ALL 0x01
 
@@ -33,6 +34,7 @@ unsigned short btchip_apdu_hash_sign() {
     unsigned short sw;
     unsigned char keyPath[MAX_BIP32_PATH_LENGTH];
     cx_sha256_t localHash;
+    cx_ecfp_public_key_t authorizationKey;
 
     SB_CHECK(N_btchip.bkp.config.operationMode);
     switch (SB_GET(N_btchip.bkp.config.operationMode)) {
@@ -104,6 +106,12 @@ unsigned short btchip_apdu_hash_sign() {
                        MAX_BIP32_PATH_LENGTH);
             parameters += (4 * G_io_apdu_buffer[ISO_OFFSET_CDATA]) + 1;
             authorizationLength = *(parameters++);
+            cx_ecfp_init_public_key(CX_CURVE_256K1, AUTHORIZATION_KEY, sizeof(AUTHORIZATION_KEY), &authorizationKey);
+            if (!cx_ecdsa_verify(&authorizationKey, CX_LAST, CX_SHA256, btchip_context_D.transactionSummary.authorizationHash, 32, parameters, authorizationLength)) {
+                PRINTF("Invalid authorization signature\n");
+                sw = BTCHIP_SW_INCORRECT_DATA;                    
+                goto discardTransaction;                    
+            }            
             parameters += authorizationLength;
             lockTime = btchip_read_u32(parameters, 1, 0);
             parameters += 4;
