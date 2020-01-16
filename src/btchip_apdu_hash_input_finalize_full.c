@@ -394,6 +394,7 @@ unsigned short btchip_apdu_hash_input_finalize_full_internal(
                            G_io_apdu_buffer + ISO_OFFSET_CDATA, apduLength);
                 btchip_context_D.currentOutputOffset += apduLength;
 
+#if 0
                 // Check if the legacy UI can be applied
                 if (!(G_coin_config->kind == COIN_KIND_QTUM) &&
                     (G_io_apdu_buffer[ISO_OFFSET_P1] == FINALIZE_P1_LAST) &&
@@ -417,6 +418,22 @@ unsigned short btchip_apdu_hash_input_finalize_full_internal(
                             BTCHIP_OUTPUT_FINALIZE_TX;
                     }
                 }
+#endif                
+
+                    while (handle_output_state() &&
+                           (!(btchip_context_D.io_flags & IO_ASYNCH_REPLY)))
+                        ;
+
+                    // Finalize the TX if necessary
+
+                    if ((btchip_context_D.remainingOutputs == 0) &&
+                        (!(btchip_context_D.io_flags & IO_ASYNCH_REPLY))) {
+                        btchip_context_D.io_flags |= IO_ASYNCH_REPLY;
+                        btchip_context_D.outputParsingState =
+                            BTCHIP_OUTPUT_FINALIZE_TX;
+                    }
+
+                
             }
 
             if (G_io_apdu_buffer[ISO_OFFSET_P1] == FINALIZE_P1_MORE) {
