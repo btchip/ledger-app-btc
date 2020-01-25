@@ -27,14 +27,17 @@ unsigned short btchip_apdu_hash_sign() {
     unsigned char dataBuffer[8];
     unsigned char hash1[32];
     unsigned char hash2[32];
-    unsigned char authorizationLength;
+    uint8_t authorizationLength;
+    uint8_t sig1_len = 0;
+    uint8_t sig2_len = 0;
+    uint8_t sig3_len = 0;
+    uint8_t sigs_verified = 0;
     unsigned char *parameters = G_io_apdu_buffer + ISO_OFFSET_CDATA;
     btchip_transaction_summary_t
         transactionSummary; // could be removed with a refactor
     unsigned short sw;
     unsigned char keyPath[MAX_BIP32_PATH_LENGTH];
     cx_sha256_t localHash;
-    cx_ecfp_public_key_t authorizationKey;
 
     SB_CHECK(N_btchip.bkp.config.operationMode);
     switch (SB_GET(N_btchip.bkp.config.operationMode)) {
@@ -60,6 +63,7 @@ unsigned short btchip_apdu_hash_sign() {
         TRY {
             btchip_set_check_internal_structure_integrity(0);
 
+#if 0
             // Zcash special - store parameters for later
 
             if ((btchip_context_D.usingOverwinter) &&
@@ -81,6 +85,7 @@ unsigned short btchip_apdu_hash_sign() {
                 CLOSE_TRY;
                 return BTCHIP_SW_OK;
             }
+#endif            
 
             if (btchip_context_D.transactionContext.transactionState !=
                 BTCHIP_TRANSACTION_SIGN_READY) {
@@ -105,14 +110,65 @@ unsigned short btchip_apdu_hash_sign() {
             os_memmove(keyPath, G_io_apdu_buffer + ISO_OFFSET_CDATA,
                        MAX_BIP32_PATH_LENGTH);
             parameters += (4 * G_io_apdu_buffer[ISO_OFFSET_CDATA]) + 1;
-            authorizationLength = *(parameters++);
-            cx_ecfp_init_public_key(CX_CURVE_256K1, AUTHORIZATION_KEY, sizeof(AUTHORIZATION_KEY), &authorizationKey);
-            if (!cx_ecdsa_verify(&authorizationKey, CX_LAST, CX_SHA256, btchip_context_D.transactionSummary.authorizationHash, 32, parameters, authorizationLength)) {
-                PRINTF("Invalid authorization signature\n");
-                sw = BTCHIP_SW_INCORRECT_DATA;                    
-                goto discardTransaction;                    
-            }            
-            parameters += authorizationLength;
+            // Check global authorization length
+            authorizationLength = parameters[0];
+            if (G_io_apdu_buffer[ISO_OFFSET_LC] != 4 * G_io_apdu_buffer[ISO_OFFSET_CDATA] + 1 + authorizationLength + 1 + 4 + 1) {
+                PRINTF("Invalid APDU length\n");
+                sw = BTCHIP_SW_INCORRECT_LENGTH;
+                goto discardTransaction;
+            }
+            parameters++; // global authorization length
+            sig1_len = parameters[0];
+            sig2_len = parameters[1 + sig1_len];
+            sig3_len = parameters[1 + sig1_len + 1 + sig2_len];
+            if ((sig1_len + sig2_len + sig3_len + 3) != authorizationLength) {
+                PRINTF("Invalid authorization length\n");
+                sw = BTCHIP_SW_INCORRECT_LENGTH;
+                goto discardTransaction;                
+            }
+            parameters++;
+            if (sig1_len != 0) {
+                if (cx_ecdsa_verify(PIC(&AUTHORIZATION_PUBLIC_KEY_1), CX_LAST, CX_SHA256, btchip_context_D.transactionSummary.authorizationHash, 32, parameters, sig1_len)) {
+                    sigs_verified++;
+                }
+                else {
+                    PRINTF("Invalid authorization signature for key 1\n");
+                    sw = BTCHIP_SW_INCORRECT_DATA;                    
+                    goto discardTransaction;                    
+                }
+            }
+            parameters += sig1_len + 1;
+            if (sig2_len != 0) {
+                if (cx_ecdsa_verify(PIC(&AUTHORIZATION_PUBLIC_KEY_2), CX_LAST, CX_SHA256, btchip_context_D.transactionSummary.authorizationHash, 32, parameters, sig2_len)) {
+                    sigs_verified++;
+                }
+                else {
+                    PRINTF("Invalid authorization signature for key 2\n");
+                    sw = BTCHIP_SW_INCORRECT_DATA;                    
+                    goto discardTransaction;                    
+                }
+            }
+            parameters += sig2_len + 1;
+            if (sig3_len != 0) {
+                if (cx_ecdsa_verify(PIC(&AUTHORIZATION_PUBLIC_KEY_3), CX_LAST, CX_SHA256, btchip_context_D.transactionSummary.authorizationHash, 32, parameters, sig3_len)) {
+                    sigs_verified++;
+                }
+                else {
+                    PRINTF("Invalid authorization signature for key 3\n");
+                    sw = BTCHIP_SW_INCORRECT_DATA;                    
+                    goto discardTransaction;                    
+                }
+            }
+            parameters += sig3_len;
+            switch(sigs_verified) {
+                case 2:
+                case 3:
+                    break;
+                default:
+                    PRINTF("Invalid authorization\n");
+                    sw = BTCHIP_SW_INCORRECT_DATA;                    
+                    goto discardTransaction;                                    
+            }
             lockTime = btchip_read_u32(parameters, 1, 0);
             parameters += 4;
             sighashType = *(parameters++);
