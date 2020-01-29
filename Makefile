@@ -248,8 +248,6 @@ else
         DEFINES   += PRINTF\(...\)=
 endif
 
-DEFINES += DEMO_AUTH_KEYS
-
 ##############
 # Compiler #
 ##############
