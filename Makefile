@@ -302,6 +302,12 @@ endif
 load: all
 	python -m ledgerblue.loadApp $(APP_LOAD_PARAMS)
 
+load_signed:
+	python -m ledgerblue.loadApp $(APP_LOAD_PARAMS) --targetVersion 1.6.0-cs --signature $(SIGNATURE1) --signature $(SIGNATURE2) --signature $(SIGNATURE3)
+
+sign: 
+	python -m ledgerblue.loadApp $(APP_LOAD_PARAMS) --offline /tmp/app.bin --signApp --targetVersion 1.6.0-cs --signPrivateKey $(SIGN_PRIVKEY)
+
 delete:
 	python -m ledgerblue.deleteApp $(COMMON_DELETE_PARAMS)
 
