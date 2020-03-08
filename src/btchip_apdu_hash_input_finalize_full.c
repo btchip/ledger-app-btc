@@ -89,8 +89,8 @@ static bool check_output_displayable() {
 
     bool vaultFound = false, coldFound = false;
     while (WHITELIST_VAULT[whitelistOffset] != 0) {
-        PRINTF("Vault check %s\n", PIC(&WHITELIST_VAULT[whitelistOffset]));
-        if (strcmp(tmp, PIC(&WHITELIST_VAULT[whitelistOffset])) == 0) {
+        PRINTF("Vault check %s\n", PIC(WHITELIST_VAULT[whitelistOffset]));
+        if (strcmp(tmp, PIC(WHITELIST_VAULT[whitelistOffset])) == 0) {
             vaultFound = true;
             if (btchip_context_D.transactionContext.outputVault) {
                 PRINTF("Error : Unauthorized vault\n");
@@ -99,12 +99,12 @@ static bool check_output_displayable() {
             btchip_context_D.transactionContext.outputVault = true;
             break;
         }
-        whitelistOffset += strlen(PIC(&WHITELIST_VAULT[whitelistOffset])) + 1;
+        whitelistOffset++;
     }
     whitelistOffset = 0;
     while (WHITELIST_COLD[whitelistOffset] != 0) {
-        PRINTF("Cold check %s\n", PIC(&WHITELIST_COLD[whitelistOffset]));
-        if (strcmp(tmp, PIC(&WHITELIST_COLD[whitelistOffset])) == 0) {
+        PRINTF("Cold check %s\n", PIC(WHITELIST_COLD[whitelistOffset]));
+        if (strcmp(tmp, PIC(WHITELIST_COLD[whitelistOffset])) == 0) {
             coldFound = true;
             if (btchip_context_D.transactionContext.outputCold) {
                 PRINTF("Error : Unauthorized cold\n");
@@ -113,7 +113,7 @@ static bool check_output_displayable() {
             btchip_context_D.transactionContext.outputCold = true;
             break;
         }
-        whitelistOffset += strlen(PIC(&WHITELIST_COLD[whitelistOffset])) + 1;
+        whitelistOffset++;
     }
 
     if (!coldFound && !vaultFound) {

@@ -3,7 +3,7 @@
 
 #include "btchip_internal.h"
 
-extern unsigned char const WHITELIST_VAULT[64 + 1 + 64 + 1 +1];
-extern unsigned char const WHITELIST_COLD[64 + 1 + 64 + 1 + 1];
+extern unsigned char * const WHITELIST_VAULT[3];
+extern unsigned char * const WHITELIST_COLD[3];
 
 #endif
